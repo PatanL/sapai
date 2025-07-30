@@ -1237,8 +1237,8 @@ def TransferStats(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=Non
         possible = [fixed_targets]
 
     effect = apet.ability["effect"]
-    copy_attack = effect["copyAttack"]
-    copy_health = effect["copyHealth"]
+    copy_attack = effect.get("copyAttack", False)
+    copy_health = effect.get("copyHealth", False)
     percentage = 1
     if "percentage" in effect:
         percentage = effect["percentage"] * 0.01
