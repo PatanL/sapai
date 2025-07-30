@@ -81,7 +81,7 @@ class Pet:
     @property
     def attack(self):
         if self._attack == "none":
-            return self._attack
+            return 0
         return min(
             status.apply_attack_dict[self.status](
                 self._attack + self._until_end_of_battle_attack_buff
@@ -92,7 +92,7 @@ class Pet:
     @property
     def health(self):
         if self._health == "none":
-            return self._health
+            return 0
         return min(self._health + self._until_end_of_battle_health_buff, 50)
 
     @property
