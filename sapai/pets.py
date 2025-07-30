@@ -256,6 +256,7 @@ class Pet:
         if self.ability["triggeredBy"]["kind"] == "EachFriend":
             if trigger == self:
                 return activated, targets, possible
+    
 
         targets, possible = func(self, [0, pet_idx], [self.team], trigger)
 
@@ -441,9 +442,9 @@ class Pet:
         Apply pet's end-of-turn ability
 
         Pets:
-            ["bluebird", "hatching-chick", "giraffe", "puppy", "tropical-fish",
+            ["bluebird", "hatching-chick", "giraffe (start of turn)", "puppy", "tropical-fish",
              "bison", "llama", "penguin", "parrot", "monkey", "poodle",
-             "tyrannosaurus"]
+             "tyrannosaurus", snail]
         """
         activated = False
         targets = []
@@ -473,6 +474,11 @@ class Pet:
                 if len(self.team) > 4:
                     return activated, targets, possible
             else:
+                return activated, targets, possible
+        elif self.ability["trigger"] == "EndOfTurnAfterLoss":
+            if self.player is None:
+                return activated, targets, possible
+            if self.player.lf_winner != False:
                 return activated, targets, possible
         else:
             if self.ability["trigger"] != "EndOfTurn":
@@ -514,6 +520,9 @@ class Pet:
         if len(te_idx) == 0:
             raise Exception("Index of triggering entity must be input")
 
+        if (self.name == "pet-shark" or self.name == "pet-fly") and self.health <= 0:
+            return False, targets, possible  # Return early if Shark's health is 0 or less
+
         if self.ability["triggeredBy"]["kind"] == "Self":
             if trigger != self:
                 return activated, targets, possible
@@ -533,6 +542,14 @@ class Pet:
 
         ### Check for Fly
         if self.name == "pet-fly":
+            # print("fly activated2, trigger: ", trigger)
+            # print("trigger.team: ", trigger.team)
+            # print("te_idx: ", te_idx)
+            try:
+                te_idx[1] = self.team.get_idx(trigger)
+            except:
+                te_idx[1] = te_idx[1]
+            # print("te_idx: ", te_idx)
             if trigger.name == "pet-zombie-fly":
                 ### Do not activate if another zombie-fly faints
                 return activated, targets, possible
@@ -559,10 +576,17 @@ class Pet:
             targets, possible = tiger_func(
                 func, True, self, [0, pet_idx], teams, trigger, te_idx
             )
+            if possible == [[]]:
+                if "maxTriggers" in self.ability:
+                    self.ability_counter -= 1
+                return activated, targets, possible
         else:
             targets, possible = tiger_func(
                 func, True, self, [0, pet_idx], teams, trigger
             )
+        # print(f"Faint trigger activated for {self.name}")
+        # print(f"Targets: {targets}")
+        # print(f"Possible: {possible}")
 
         activated = True
         return activated, targets, possible
@@ -638,7 +662,7 @@ class Pet:
         opponent's Team.
 
         Pets:
-            ["kangaroo","snake"]
+            ["kangaroo","snake", "elephant]
 
         """
         activated = False
@@ -650,10 +674,10 @@ class Pet:
         if type(trigger).__name__ != "Team":
             raise Exception("Trigger must be a Team")
 
-        if self.ability["triggeredBy"]["kind"] != "FriendAhead":
-            raise Exception(
-                "Only triggeredBy FriendAhead implemented for after_attack_trigger"
-            )
+        # if self.ability["triggeredBy"]["kind"] != "FriendAhead":
+        #     raise Exception(
+        #         "Only triggeredBy FriendAhead implemented for after_attack_trigger"
+        #     )
 
         ### Check that self is behind the front friend which should have just
         ###   attacked
@@ -714,8 +738,8 @@ class Pet:
             raise Exception("Only Self trigger available for hurt_trigger")
 
         ### Cannot call if health is less than zero because fainted
-        if self._health <= 0:
-            return activated, targets, possible
+        # if self._health <= 0:
+        #     return activated, targets, possible
 
         if "maxTriggers" in self.ability:
             if self.ability_counter >= self.ability["maxTriggers"]:
@@ -754,8 +778,8 @@ class Pet:
             raise Exception("Trigger must be a Team")
 
         ### Cannot call if health is less than zero because fainted
-        if self._health <= 0:
-            return activated, targets, possible
+        # if self._health <= 0:
+        #     return activated, targets, possible
 
         if "maxTriggers" in self.ability:
             if self.ability_counter >= self.ability["maxTriggers"]:
@@ -764,7 +788,10 @@ class Pet:
                 self.ability_counter += 1
 
         func = get_effect_function(self)
-        pet_idx = self.team.get_idx(self)
+        try:
+            pet_idx = self.team.get_idx(self)
+        except:
+            pet_idx = 0
         targets, possible = tiger_func(
             func, False, self, [0, pet_idx], [self.team, trigger], trigger
         )

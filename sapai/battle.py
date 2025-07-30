@@ -9,6 +9,7 @@ from sapai.effects import (
     SummonRandomPet,
 )
 from sapai import status
+from collections import defaultdict
 
 
 class Battle:
@@ -68,14 +69,23 @@ class Battle:
 
     def battle(self):
         ### Perform all effects that occur at the start of the battle
+        print(f"\nBefore Battle:")
+        print("Team 0:", [str(pet) for pet in self.t0 if not pet.empty])
+        print("Team 1:", [str(pet) for pet in self.t1 if not pet.empty])
         self.start()
 
         battle_iter = 0
+        # print(f"\nStart of battle:")
+        # print("Team 0:", [str(pet) for pet in self.t0 if not pet.empty])
+        # print("Team 1:", [str(pet) for pet in self.t1 if not pet.empty])
         while True:
             ### First update effect order
             self.pet_priority = self.update_pet_priority(self.t0, self.t1)
             ### Then attack
             result = self.attack(battle_iter)
+            # print(f"\nAfter attack {battle_iter}:")
+            # print("Team 0:", [str(pet) for pet in self.t0 if not pet.empty])
+            # print("Team 1:", [str(pet) for pet in self.t1 if not pet.empty])
             battle_iter += 1
             if not result:
                 break
@@ -506,34 +516,191 @@ def battle_phase_start(battle_obj, phase, teams, pet_priority, phase_dict):
     return phase_list
 
 
+# def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_dict):
+#     phase_list = phase_dict[phase]
+#     pp = pet_priority
+#     status_list = []
+#     while True:
+#         ### Get a list of fainted pets
+#         fainted_list = []
+#         for team_idx, pet_idx in pp:
+#             p = teams[team_idx][pet_idx].pet
+#             if p.name == "pet-none":
+#                 continue
+#             if p.health <= 0:
+#                 fainted_list.append([team_idx, pet_idx])
+#                 if p.status != "none":
+#                     status_list.append([p, team_idx, pet_idx])
+
+#         ### Check every fainted pet
+#         faint_targets_list = []
+#         for team_idx, pet_idx in fainted_list:
+#             fteam, oteam = get_teams([team_idx, pet_idx], teams)
+#             fainted_pet = fteam[pet_idx].pet
+#             ### Check for all pets that trigger off this fainted pet (including self)
+#             for te_team_idx, te_pet_idx in pp:
+#                 other_pet = teams[te_team_idx][te_pet_idx].pet
+#                 te_idx = [te_team_idx, te_pet_idx]
+#                 activated, targets, possible = other_pet.faint_trigger(
+#                     fainted_pet, te_idx, oteam
+#                 )
+#                 if activated:
+#                     faint_targets_list.append(
+#                         [
+#                             fainted_pet,
+#                             te_team_idx,
+#                             te_pet_idx,
+#                             activated,
+#                             targets,
+#                             possible,
+#                         ]
+#                     )
+#                 append_phase_list(
+#                     phase_list,
+#                     other_pet,
+#                     te_team_idx,
+#                     te_pet_idx,
+#                     activated,
+#                     targets,
+#                     possible,
+#                 )
+
+#             ### If no trigger was activated, then the pet was never removed.
+#             ###   Check to see if it should be removed now.
+#             if teams[team_idx].check_friend(fainted_pet):
+#                 teams[team_idx].remove(fainted_pet)
+#                 ### Add this info to phase list
+#                 phase_list.append(
+#                     ("Fainted", (team_idx, pet_idx), (fainted_pet.__repr__()), [""])
+#                 )
+
+#         ### If pet was summoned, then need to check for summon triggers
+#         for (
+#             fainted_pet,
+#             team_idx,
+#             pet_idx,
+#             activated,
+#             targets,
+#             possible,
+#         ) in faint_targets_list:
+#             fteam, _ = get_teams([team_idx, pet_idx], teams)
+#             check_summon_triggers(
+#                 phase_list,
+#                 fainted_pet,
+#                 team_idx,
+#                 pet_idx,
+#                 fteam,
+#                 activated,
+#                 targets,
+#                 possible,
+#             )
+
+#         ### If pet was hurt, then need to check for hurt triggers
+#         hurt_list = []
+#         for team_idx, pet_idx in pp:
+#             fteam, oteam = get_teams([team_idx, pet_idx], teams)
+#             p = fteam[pet_idx].pet
+#             while p._hurt > 0:
+#                 hurt_list.append([team_idx, pet_idx])
+#                 activated, targets, possible = p.hurt_trigger(oteam)
+#                 append_phase_list(
+#                     phase_list, p, team_idx, pet_idx, activated, targets, possible
+#                 )
+
+#         battle_obj.pet_priority = battle_obj.update_pet_priority(
+#             battle_obj.t0, battle_obj.t1
+#         )
+#         pp = battle_obj.pet_priority
+
+#         ### If nothing happend, stop the loop
+#         if len(fainted_list) == 0 and len(hurt_list) == 0:
+#             break
+
+#     ### Check for status triggers on pet
+#     for p, team_idx, pet_idx in status_list:
+#         check_status_triggers(phase_list, p, team_idx, pet_idx, teams)
+
+#     return phase_list
+def find_pet_team_and_index(pet, teams):
+    for team_idx, team in enumerate(teams):
+        for pet_idx, slot in enumerate(team):
+            if slot.pet == pet:
+                return team_idx, pet_idx
+    return None, None  # Return None if pet is not found
+
 def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_dict):
+    # print("\n--- Starting battle_phase_hurt_and_faint ---")
     phase_list = phase_dict[phase]
     pp = pet_priority
     status_list = []
+    iteration = 0
+    pet_position_dict = defaultdict(list)
     while True:
+        # print(f"\nIteration {iteration}")
+        iteration += 1
+        
         ### Get a list of fainted pets
+        # fainted_list = []
+        # for team_idx, pet_idx in pp:
+        #     p = teams[team_idx][pet_idx].pet
+        #     if p.name == "pet-none":
+        #         continue
+        #     if p.health <= 0:
+        #         fainted_list.append([team_idx, pet_idx])
+        #         if p.status != "none":
+        #             status_list.append([p, team_idx, pet_idx])
         fainted_list = []
         for team_idx, pet_idx in pp:
             p = teams[team_idx][pet_idx].pet
             if p.name == "pet-none":
                 continue
             if p.health <= 0:
-                fainted_list.append([team_idx, pet_idx])
+                fainted_list.append(p)
                 if p.status != "none":
-                    status_list.append([p, team_idx, pet_idx])
+                    status_list.append(p) 
+        
+        # print(f"Fainted pets: {fainted_list}")
+        # print(f"Pets with status: {status_list}")
 
         ### Check every fainted pet
         faint_targets_list = []
-        for team_idx, pet_idx in fainted_list:
+        for fainted_pet in fainted_list:
+        # for team_idx, pet_idx in fainted_list: 
+            # fainted_pet = fteam[pet_idx].pet
+            team_idx, pet_idx = find_pet_team_and_index(fainted_pet, teams)
+            pet_position_dict[fainted_pet] = [team_idx, pet_idx]
             fteam, oteam = get_teams([team_idx, pet_idx], teams)
-            fainted_pet = fteam[pet_idx].pet
+            # print("team_idx, pet_idx: ", (team_idx, pet_idx))
+            # this is to prevent pet position index changes affecting faints, but should make it so i have pets in fainted list and then get their indexes later
+            # print(f"Processing fainted pet: {fainted_pet} from team {team_idx}")
+            # Process faint trigger for the fainted pet first
+            activated, targets, possible = fainted_pet.faint_trigger(fainted_pet, [team_idx, pet_idx], oteam)
+            if activated:
+                faint_targets_list.append([fainted_pet, team_idx, pet_idx, activated, targets, possible])
+                append_phase_list(phase_list, fainted_pet, team_idx, pet_idx, activated, targets, possible)
+                n = len(pp)
+                for i in range(len(possible)):
+                    if n - 1 + i < 5:
+                        pp.append((team_idx, n - 1 + i))
+            # Process hurt trigger immediately after faint trigger
+            while fainted_pet._hurt > 0:
+                hurt_activated, hurt_targets, hurt_possible = fainted_pet.hurt_trigger(oteam)
+                # print(f"Hurt trigger for {fainted_pet} - Activated: {hurt_activated}, Targets: {hurt_targets}")
+                append_phase_list(phase_list, fainted_pet, team_idx, pet_idx, hurt_activated, hurt_targets, hurt_possible)
+            processed_pets = set()
             ### Check for all pets that trigger off this fainted pet (including self)
             for te_team_idx, te_pet_idx in pp:
+                fteam, oteam = get_teams([team_idx, pet_idx], teams)
+                # print("fteam, oteam: ", (fteam, oteam))
                 other_pet = teams[te_team_idx][te_pet_idx].pet
+                if other_pet in processed_pets or (other_pet.name == "pet-fly" and team_idx != te_team_idx):
+                    continue
+                processed_pets.add(other_pet)
                 te_idx = [te_team_idx, te_pet_idx]
                 activated, targets, possible = other_pet.faint_trigger(
                     fainted_pet, te_idx, oteam
                 )
+                # print(f"Faint trigger for {other_pet} - Activated: {activated}, Targets: {targets}")
                 if activated:
                     faint_targets_list.append(
                         [
@@ -545,6 +712,11 @@ def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_di
                             possible,
                         ]
                     )
+                    # i don't want to add space for unsummoned pet
+                    n = len(pp)
+                    for i in range(len(possible)):
+                        if n - 1 + i < 5:
+                            pp.append((te_team_idx, n - 1 + i))
                 append_phase_list(
                     phase_list,
                     other_pet,
@@ -554,6 +726,11 @@ def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_di
                     targets,
                     possible,
                 )
+                # battle_obj.pet_priority = battle_obj.update_pet_priority(
+                #     battle_obj.t0, battle_obj.t1
+                # )
+                # pp = battle_obj.pet_priority
+                # print(f"Updated pet priority: {pp}")
 
             ### If no trigger was activated, then the pet was never removed.
             ###   Check to see if it should be removed now.
@@ -563,6 +740,9 @@ def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_di
                 phase_list.append(
                     ("Fainted", (team_idx, pet_idx), (fainted_pet.__repr__()), [""])
                 )
+                # print(f"Removed fainted pet {fainted_pet} from team {team_idx}")
+
+        # print(f"Faint targets list: {faint_targets_list}")
 
         ### If pet was summoned, then need to check for summon triggers
         for (
@@ -574,6 +754,7 @@ def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_di
             possible,
         ) in faint_targets_list:
             fteam, _ = get_teams([team_idx, pet_idx], teams)
+            # print(f"Checking summon triggers for {fainted_pet}")
             check_summon_triggers(
                 phase_list,
                 fainted_pet,
@@ -593,31 +774,64 @@ def battle_phase_hurt_and_faint(battle_obj, phase, teams, pet_priority, phase_di
             while p._hurt > 0:
                 hurt_list.append([team_idx, pet_idx])
                 activated, targets, possible = p.hurt_trigger(oteam)
+                # print(f"Hurt trigger for {p} - Activated: {activated}, Targets: {targets}")
                 append_phase_list(
                     phase_list, p, team_idx, pet_idx, activated, targets, possible
                 )
+
+        # print(f"Hurt list: {hurt_list}")
 
         battle_obj.pet_priority = battle_obj.update_pet_priority(
             battle_obj.t0, battle_obj.t1
         )
         pp = battle_obj.pet_priority
+        # print(f"Updated pet priority: {pp}")
 
         ### If nothing happend, stop the loop
         if len(fainted_list) == 0 and len(hurt_list) == 0:
+            # print("No more fainted or hurt pets, breaking loop")
             break
 
     ### Check for status triggers on pet
-    for p, team_idx, pet_idx in status_list:
+    # for p, team_idx, pet_idx in status_list:
+    for p in status_list:
+        # print(f"Checking status triggers for {p}")
+        # print(pet_position_dict)
+        team_idx, pet_idx = pet_position_dict[p]
         check_status_triggers(phase_list, p, team_idx, pet_idx, teams)
 
+    # print("--- Ending battle_phase_hurt_and_faint ---")
     return phase_list
 
 
+# def battle_phase_attack_before(battle_obj, phase, teams, pet_priority, phase_dict):
+#     phase_list = phase_dict["phase_attack_before"]
+#     aidx, nidx = get_attack_idx(phase, teams, pet_priority, phase_dict)
+#     pp = pet_priority
+#     if len(aidx) != 2:
+#         ### Must be two animals available for attacking to continue with battle
+#         return phase_list
+#     for team_idx, pet_idx in pp:
+#         if aidx[team_idx][1] != pet_idx:
+#             ### Effects are only activated for the attacking pet
+#             continue
+#         p = teams[team_idx][pet_idx].pet
+#         fteam, oteam = get_teams([team_idx, pet_idx], teams)
+#         activated, targets, possible = p.before_attack_trigger(oteam)
+#         append_phase_list(
+#             phase_list, p, team_idx, pet_idx, activated, targets, possible
+#         )
+
+#     return phase_dict
 def battle_phase_attack_before(battle_obj, phase, teams, pet_priority, phase_dict):
+    # print("\n--- Starting battle_phase_attack_before ---")
     phase_list = phase_dict["phase_attack_before"]
     aidx, nidx = get_attack_idx(phase, teams, pet_priority, phase_dict)
     pp = pet_priority
+    # print(f"Attack index: {aidx}")
+    # print(f"Next index: {nidx}")
     if len(aidx) != 2:
+        # print("Not enough animals for attacking, returning")
         ### Must be two animals available for attacking to continue with battle
         return phase_list
     for team_idx, pet_idx in pp:
@@ -626,11 +840,14 @@ def battle_phase_attack_before(battle_obj, phase, teams, pet_priority, phase_dic
             continue
         p = teams[team_idx][pet_idx].pet
         fteam, oteam = get_teams([team_idx, pet_idx], teams)
+        # print(f"Checking before_attack_trigger for {p} from team {team_idx}")
         activated, targets, possible = p.before_attack_trigger(oteam)
+        # print(f"Before attack trigger - Activated: {activated}, Targets: {targets}")
         append_phase_list(
             phase_list, p, team_idx, pet_idx, activated, targets, possible
         )
 
+    # print("--- Ending battle_phase_attack_before ---")
     return phase_dict
 
 
@@ -688,63 +905,172 @@ def get_attack_idx(phase, teams, pet_priority, phase_dict):
     return ret_idx, ret_next_idx
 
 
+# def battle_phase_attack_after(battle_obj, phase, teams, pet_priority, phase_dict):
+#     phase_list = phase_dict[phase]
+#     pp = pet_priority
+
+#     #### Can get the two animals that just previously attacked from the
+#     ####   phase_dict
+#     attack_history = phase_dict["phase_attack"]
+#     if len(attack_history) == 0:
+#         return phase_dict
+
+#     t0_pidx = attack_history[0][1][0]
+#     t1_pidx = attack_history[0][1][1]
+
+#     for team_idx, pet_idx in pp:
+#         ### Check if current pet is directly behind the pet that just attacked
+#         test_idx = [t0_pidx, t1_pidx][team_idx] + 1
+#         if pet_idx != test_idx:
+#             continue
+
+#         ### If it is, then the after_attack ability can be activated
+#         p = teams[team_idx][pet_idx].pet
+#         fteam, oteam = get_teams([team_idx, pet_idx], teams)
+#         activated, targets, possible = p.after_attack_trigger(oteam)
+#         append_phase_list(
+#             phase_list, p, team_idx, pet_idx, activated, targets, possible
+#         )
+
+#     return phase_dict
 def battle_phase_attack_after(battle_obj, phase, teams, pet_priority, phase_dict):
+    # print("\n--- Starting battle_phase_attack_after ---")
     phase_list = phase_dict[phase]
     pp = pet_priority
+
+    # print(f"Phase: {phase}")
+    # print(f"Pet priority: {pp}")
 
     #### Can get the two animals that just previously attacked from the
     ####   phase_dict
     attack_history = phase_dict["phase_attack"]
+    # print(f"Attack history: {attack_history}")
     if len(attack_history) == 0:
+        # print("No attack history, returning phase_dict")
         return phase_dict
 
     t0_pidx = attack_history[0][1][0]
     t1_pidx = attack_history[0][1][1]
+    # print(f"Team 0 pet index that attacked: {t0_pidx}")
+    # print(f"Team 1 pet index that attacked: {t1_pidx}")
 
     for team_idx, pet_idx in pp:
+        # print(f"\nChecking pet at team {team_idx}, index {pet_idx}")
         ### Check if current pet is directly behind the pet that just attacked
         test_idx = [t0_pidx, t1_pidx][team_idx] + 1
+        # print(f"Test index: {test_idx}")
         if pet_idx != test_idx:
+            # print("Pet is not directly behind the pet that just attacked, skipping")
             continue
 
         ### If it is, then the after_attack ability can be activated
         p = teams[team_idx][pet_idx].pet
+        # print(f"Pet that can activate after_attack: {p}")
         fteam, oteam = get_teams([team_idx, pet_idx], teams)
+        # print(f"Friend team: {fteam}")
+        # print(f"Opponent team: {oteam}")
         activated, targets, possible = p.after_attack_trigger(oteam)
+        # print(f"After attack trigger - Activated: {activated}, Targets: {targets}, Possible: {possible}")
         append_phase_list(
             phase_list, p, team_idx, pet_idx, activated, targets, possible
         )
 
+    # print(f"Final phase list: {phase_list}")
+    # print("--- Ending battle_phase_attack_after ---")
     return phase_dict
 
 
+
+# def battle_phase_knockout(battle_obj, phase, teams, pet_priority, phase_dict):
+#     phase_list = phase_dict[phase]
+
+#     #### Get knockout list from the end of the phase_attack info and remove
+#     ####   the knockout list from phase attack
+#     attack_history = phase_dict["phase_attack"]
+#     if len(attack_history) == 0:
+#         return phase_dict
+#     knockout_list = attack_history[-1]
+#     phase_dict["phase_attack"] = phase_dict["phase_attack"][0:-1]
+
+#     for apet, team_idx in knockout_list:
+#         if apet.health > 0:
+#             ### Need to loop to handle Rhino
+#             fteam, oteam = get_teams([team_idx, 0], teams)
+#             current_length = 0
+#             while True:
+#                 pet_idx = fteam.index(apet)
+#                 activated, targets, possible = apet.knockout_trigger(oteam)
+#                 append_phase_list(
+#                     phase_list, apet, team_idx, pet_idx, activated, targets, possible
+#                 )
+
+#                 if not activated:
+#                     ### Easy breaking condition
+#                     break
+
+#                 battle_phase(
+#                     battle_obj,
+#                     "phase_hurt_and_faint_k",
+#                     teams,
+#                     pet_priority,
+#                     phase_dict,
+#                 )
+
+#                 if len(phase_dict["phase_hurt_and_faint_k"]) == current_length:
+#                     ### No more recursion needed because nothing else fainted
+#                     break
+#                 else:
+#                     ### Otherwise, something has been knockedout by Rhino
+#                     ### ability and while loop should iterate again
+#                     current_length = len(phase_dict["phase_hurt_and_faint_k"])
+
+#     return phase_dict
+
 def battle_phase_knockout(battle_obj, phase, teams, pet_priority, phase_dict):
+    # print("\n--- Starting battle_phase_knockout ---")
+    # print(f"Initial teams: {teams}")
+    
     phase_list = phase_dict[phase]
 
     #### Get knockout list from the end of the phase_attack info and remove
     ####   the knockout list from phase attack
     attack_history = phase_dict["phase_attack"]
     if len(attack_history) == 0:
+        # print("No attack history, returning phase_dict")
         return phase_dict
     knockout_list = attack_history[-1]
     phase_dict["phase_attack"] = phase_dict["phase_attack"][0:-1]
+    
+    # print(f"Knockout list: {knockout_list}")
 
     for apet, team_idx in knockout_list:
-        if apet.health > 0:
+        # print(f"\nProcessing pet: {apet} from team {team_idx}")
+        if apet.health > 0: # knockout and hurt should work on faint
+            # print(f"Pet {apet} still has health > 0")
             ### Need to loop to handle Rhino
             fteam, oteam = get_teams([team_idx, 0], teams)
+            # print(f"Friend team: {fteam}")
+            # print(f"Opponent team: {oteam}")
             current_length = 0
             while True:
-                pet_idx = fteam.index(apet)
+                # print("apet: ", apet)
+                try:
+                    pet_idx = fteam.index(apet)
+                except:
+                    pet_idx = 0
+                # print(f"Pet index in friend team: {pet_idx}")
+                # print("enemy team: ", oteam)
                 activated, targets, possible = apet.knockout_trigger(oteam)
+                # print(f"Knockout trigger - Activated: {activated}, Targets: {targets}, Possible: {possible}")
                 append_phase_list(
                     phase_list, apet, team_idx, pet_idx, activated, targets, possible
                 )
 
                 if not activated:
-                    ### Easy breaking condition
+                    # print("Knockout not activated, breaking loop")
                     break
 
+                # print("Entering battle_phase for 'phase_hurt_and_faint_k'")
                 battle_phase(
                     battle_obj,
                     "phase_hurt_and_faint_k",
@@ -752,16 +1078,19 @@ def battle_phase_knockout(battle_obj, phase, teams, pet_priority, phase_dict):
                     pet_priority,
                     phase_dict,
                 )
+                # print("enemy team after faints: ", oteam)
 
                 if len(phase_dict["phase_hurt_and_faint_k"]) == current_length:
-                    ### No more recursion needed because nothing else fainted
+                    # print("No more recursion needed, breaking loop")
                     break
                 else:
-                    ### Otherwise, something has been knockedout by Rhino
-                    ### ability and while loop should iterate again
+                    # print("Something has been knocked out by Rhino ability, continuing loop")
                     current_length = len(phase_dict["phase_hurt_and_faint_k"])
 
+    # print("\n--- Ending battle_phase_knockout ---")
+    # print(f"Final teams: {teams}")
     return phase_dict
+
 
 
 def get_attack(p0, p1):

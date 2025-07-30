@@ -226,7 +226,10 @@ class Team(SAPList):
         return ret_pets
 
     def get_behind(self, obj, n=1):
-        pet_idx = self.get_idx(obj)
+        try:
+            pet_idx = self.get_idx(obj)
+        except:
+            pet_idx = 0
         fidx = []
         for iter_idx, temp_slot in enumerate(self):
             if not temp_slot.empty:

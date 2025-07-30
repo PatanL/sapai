@@ -54,7 +54,7 @@ class Player:
         self,
         shop=None,
         team=None,
-        lives=10,
+        lives=6,
         default_gold=10,
         gold=10,
         turn=1,
@@ -107,10 +107,12 @@ class Player:
             self.action_history = []
         else:
             self.action_history = list(action_history)
+        self.turn_ended = False
 
     @storeaction
     def start_turn(self, winner=None):
         ### Update turn count and gold
+        self.turn_ended = False
         self.turn += 1
         self.gold = self.default_gold
         self.lf_winner = winner
@@ -158,6 +160,7 @@ class Player:
         self.gold -= cost
         self.team.append(pet)
         self.shop.buy(pet)
+        # self.last_bought_pet = pet.name
 
         ### Check buy_friend triggers after purchase
         for slot in self.team:
@@ -530,6 +533,7 @@ class Player:
         ### Activate eot trigger
         for slot in self.team:
             slot._pet.eot_trigger()
+        self.turn_ended = True
         return None
 
     @property

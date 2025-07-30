@@ -321,17 +321,41 @@ def get_target(
                 break
         return ret_pets, [ret_pets]
 
+    # elif kind == "FriendBehind":
+    #     chosen_idx = []
+    #     for temp_idx in fidx:
+    #         if temp_idx > apet_idx[1]:
+    #             chosen_idx.append(temp_idx)
+    #     ret_pets = []
+    #     for temp_idx in chosen_idx:
+    #         ret_pets.append(fteam[temp_idx].pet)
+    #         if len(ret_pets) >= n:
+    #             break
+    #     return ret_pets, [ret_pets]
     elif kind == "FriendBehind":
         chosen_idx = []
         for temp_idx in fidx:
             if temp_idx > apet_idx[1]:
                 chosen_idx.append(temp_idx)
         ret_pets = []
+        exclude_status = target.get("excludeStatus")
         for temp_idx in chosen_idx:
-            ret_pets.append(fteam[temp_idx].pet)
-            if len(ret_pets) >= n:
-                break
+            temp_pet = fteam[temp_idx].pet
+            if exclude_status:
+                if temp_pet.status != exclude_status:
+                    ret_pets.append(temp_pet)
+                    if len(ret_pets) >= n:
+                        break
+            else:
+                ret_pets.append(temp_pet)
+                if len(ret_pets) >= n:
+                    break
+
         return ret_pets, [ret_pets]
+
+    
+    # elif kind == "":
+    #     pass
 
     elif kind == "HighestHealthEnemy":
         health_list = []
@@ -373,6 +397,29 @@ def get_target(
             return ret_pets, [ret_pets]
         else:
             return [], []
+    elif kind == "Level2And3Friends":
+        level_list = []
+        for temp_idx in fidx:
+            level_list.append(fteam[temp_idx].pet.level)
+        if len(level_list) > 0:
+            keep_idx = np.where(np.array(level_list) > 1)[0]
+            ret_pets = []
+            for temp_idx in keep_idx:
+                ### Dereference idx
+                temp_idx = fidx[temp_idx]
+                ret_pets.append(fteam[temp_idx].pet)
+            
+            # Get the 'n' value from the target dictionary
+            n = target.get("n", len(ret_pets))  # Default to all if 'n' is not specified
+            
+            # Randomly select 'n' pets if there are more than 'n' eligible pets
+            if len(ret_pets) > n:
+                ret_pets = np.random.choice(ret_pets, size=n, replace=False).tolist()
+            
+            return ret_pets, [ret_pets]
+        else:
+            return [], []
+
 
     elif kind == "LowestHealthEnemy":
         health_list = []
@@ -527,18 +574,46 @@ def AllOf(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
     return target, possible_targets
 
 
-def ApplyStatus(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
-    fixed_targets = fixed_targets or []
+# def ApplyStatus(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
+#     fixed_targets = fixed_targets or []
 
+#     if len(fixed_targets) == 0:
+#         target, possible = get_target(apet, apet_idx, teams, te=te)
+#     else:
+#         target = fixed_targets
+#         possible = [fixed_targets]
+#     status = apet.ability["effect"]["status"]
+#     for target_pet in target:
+#         target_pet.status = status
+#     return target, possible
+def ApplyStatus(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
+    # print(f"ApplyStatus called for {apet.name}")
+    fixed_targets = fixed_targets or []
     if len(fixed_targets) == 0:
         target, possible = get_target(apet, apet_idx, teams, te=te)
+        # print(f"Targets from get_target: {[t.name for t in target]}")
     else:
         target = fixed_targets
         possible = [fixed_targets]
+        # print(f"Using fixed targets: {[t.name for t in target]}")
+    
     status = apet.ability["effect"]["status"]
+    exclude_status = apet.ability["effect"]["to"].get("excludeStatus")
+    # print(f"Status to apply: {status}, Exclude status: {exclude_status}")
+    
+    applied_targets = []
     for target_pet in target:
+        # print(f"Checking target: {target_pet.name}, Current status: {target_pet.status}")
+        if exclude_status and target_pet.status == exclude_status:
+            # print(f"Skipping {target_pet.name} due to existing status")
+            continue
         target_pet.status = status
-    return target, possible
+        applied_targets.append(target_pet)
+        # print(f"Applied {status} to {target_pet.name}")
+    
+    # print(f"Final applied targets: {[t.name for t in applied_targets]}")
+    return applied_targets, possible
+
 
 
 def DealDamage(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
@@ -745,8 +820,8 @@ def RefillShops(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None)
     """
     fixed_targets = fixed_targets or []
 
-    if apet.name != "pet-cow":
-        raise Exception("Only cow implemented for RefillShops")
+    # if apet.name != "pet-cow":
+    #     raise Exception("Only cow implemented for RefillShops")
     shop = apet.shop
     level = apet.level
     targets = []
@@ -758,6 +833,37 @@ def RefillShops(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None)
             slot.item = temp_food
             targets.append(slot)
     return targets, [targets]
+
+def RefillShopsWorm(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
+    """
+    Refills shop with apples, scaling with the activating pet's level.
+    """
+    fixed_targets = fixed_targets or []
+
+    if apet.name != "pet-worm":
+        raise Exception("Only worm implemented for RefillShops")
+    
+    shop = apet.shop
+    level = apet.level
+    targets = []
+    
+    for slot in shop:
+        if slot.slot_type == "food":
+            temp_food = Food("apple")
+            temp_food.attack *= level
+            temp_food.health *= level
+            
+            # Add the new food to the slot instead of replacing
+            if hasattr(slot, 'items'):
+                slot.items.append(temp_food)
+            else:
+                # If the slot doesn't support multiple items, create a list
+                slot.items = [slot.item, temp_food] if slot.item else [temp_food]
+            
+            targets.append(slot)
+    
+    return targets, [targets]
+
 
 
 def RepeatAbility(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
@@ -847,9 +953,9 @@ def SummonPet(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
     """ """
     # print("CALLED SUMMON")
     # print("----------------")
-    # print(pet_idx)
+    # print(apet_idx)
     # print(teams)
-    # print(fainted_pet)
+    # print(apet)
     # print(te)
     te_idx = te_idx or []
     fixed_targets = fixed_targets or []
@@ -966,7 +1072,7 @@ def SummonRandomPet(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=N
             empty_idx.append(iter_idx)
     if len(empty_idx) == 0:
         ### Can safely return, cannot summon
-        return []
+        return [], []
 
     target_slot_idx = np.max(empty_idx)
     fteam[target_slot_idx] = str(chosen)
@@ -994,6 +1100,64 @@ def SummonRandomPet(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=N
     return [spet], [[x] for x in possible]
 
 
+# def Swallow(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
+#     fixed_targets = fixed_targets or []
+
+#     fteam, oteam = get_teams(apet_idx, teams)
+#     if len(fixed_targets) == 0:
+#         target, possible = get_target(apet, apet_idx, teams, te=te)
+#     else:
+#         target = fixed_targets
+#         possible = [fixed_targets]
+
+#     if len(target) == 0:
+#         return target, possible
+#     output_level = apet.level
+#     if output_level == 1:
+#         level_attack = 0
+#         level_health = 0
+#     elif output_level == 2:
+#         level_attack = 2
+#         level_health = 2
+#     elif output_level == 3:
+#         level_attack = 5
+#         level_health = 5
+#     else:
+#         raise Exception()
+
+#     # if apet.name != "pet-whale":
+#     #     raise Exception("Swallow only done by whale")
+
+#     ### Remove target from team and shop this pet as the given level as a
+#     ### Summon ability
+#     for temp_target in target:
+#         if data["pets"][temp_target.name]["baseAttack"] != "?":
+#             base_attack = data["pets"][temp_target.name]["baseAttack"]
+#         else:
+#             base_attack = temp_target.attack
+#         if data["pets"][temp_target.name]["baseHealth"] != "?":
+#             base_health = data["pets"][temp_target.name]["baseHealth"]
+#         else:
+#             base_health = temp_target.health
+
+#         summon_dict = {
+#             "description": f"Swallowed and summon level {temp_target.name} {output_level}",
+#             "trigger": "Faint",
+#             "triggeredBy": {"kind": "Self"},
+#             "effect": {
+#                 "kind": "SummonPet",
+#                 "pet": temp_target.name,
+#                 "withAttack": base_attack + level_attack,
+#                 "withHealth": base_health + level_health,
+#                 "withLevel": output_level,
+#                 "team": "Friendly",
+#             },
+#         }
+#         apet.set_ability(summon_dict)
+#         temp_target._health = -1
+
+#     fteam.move_forward()
+#     return target, possible
 def Swallow(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
     fixed_targets = fixed_targets or []
 
@@ -1006,33 +1170,23 @@ def Swallow(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
 
     if len(target) == 0:
         return target, possible
+
     output_level = apet.level
-    if output_level == 1:
-        level_attack = 0
-        level_health = 0
-    elif output_level == 2:
-        level_attack = 2
-        level_health = 2
-    elif output_level == 3:
-        level_attack = 5
-        level_health = 5
-    else:
-        raise Exception()
 
-    # if apet.name != "pet-whale":
-    #     raise Exception("Swallow only done by whale")
-
-    ### Remove target from team and shop this pet as the given level as a
-    ### Summon ability
     for temp_target in target:
         if data["pets"][temp_target.name]["baseAttack"] != "?":
             base_attack = data["pets"][temp_target.name]["baseAttack"]
         else:
             base_attack = temp_target.attack
+
         if data["pets"][temp_target.name]["baseHealth"] != "?":
             base_health = data["pets"][temp_target.name]["baseHealth"]
         else:
             base_health = temp_target.health
+
+        # Multiply base stats by the whale's level
+        summon_attack = base_attack * output_level
+        summon_health = base_health * output_level
 
         summon_dict = {
             "description": f"Swallowed and summon level {temp_target.name} {output_level}",
@@ -1041,8 +1195,8 @@ def Swallow(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
             "effect": {
                 "kind": "SummonPet",
                 "pet": temp_target.name,
-                "withAttack": base_attack + level_attack,
-                "withHealth": base_health + level_health,
+                "withAttack": summon_attack,
+                "withHealth": summon_health,
                 "withLevel": output_level,
                 "team": "Friendly",
             },
@@ -1051,7 +1205,9 @@ def Swallow(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
         temp_target._health = -1
 
     fteam.move_forward()
+
     return target, possible
+
 
 
 def TransferAbility(apet, apet_idx, teams, te=None, te_idx=None, fixed_targets=None):
