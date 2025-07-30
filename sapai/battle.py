@@ -69,9 +69,9 @@ class Battle:
 
     def battle(self):
         ### Perform all effects that occur at the start of the battle
-        print(f"\nBefore Battle:")
-        print("Team 0:", [str(pet) for pet in self.t0 if not pet.empty])
-        print("Team 1:", [str(pet) for pet in self.t1 if not pet.empty])
+        # print(f"\nBefore Battle:")
+        # print("Team 0:", [str(pet) for pet in self.t0 if not pet.empty])
+        # print("Team 1:", [str(pet) for pet in self.t1 if not pet.empty])
         self.start()
 
         battle_iter = 0
